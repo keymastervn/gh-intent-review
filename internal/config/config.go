@@ -111,26 +111,40 @@ func (c *Config) EnabledSymbols() []IntentSymbol {
 	return enabled
 }
 
+// LoadResult carries the loaded config and a diagnostic about where it came from.
+type LoadResult struct {
+	Config     *Config
+	ConfigPath string // empty if defaults are being used
+}
+
 // Load reads config from the nearest .gh-intent-review.yml, falling back to defaults.
-func Load() (*Config, error) {
+// Pass an explicit path to skip the search (e.g. from a --config flag).
+func Load(explicitPath string) (*LoadResult, error) {
 	cfg := DefaultConfig()
+	result := &LoadResult{Config: cfg}
 
-	// Search current dir, then home dir
-	paths := []string{
-		filepath.Join(".", configFileName),
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		paths = append(paths, filepath.Join(home, configFileName))
+	var searchPaths []string
+	if explicitPath != "" {
+		searchPaths = []string{explicitPath}
+	} else {
+		searchPaths = []string{filepath.Join(".", configFileName)}
+		if home, err := os.UserHomeDir(); err == nil {
+			searchPaths = append(searchPaths, filepath.Join(home, configFileName))
+		}
 	}
 
-	for _, p := range paths {
+	for _, p := range searchPaths {
 		data, err := os.ReadFile(p)
 		if err != nil {
+			if explicitPath != "" {
+				return nil, fmt.Errorf("reading config %s: %w", p, err)
+			}
 			continue
 		}
 		if err := yaml.Unmarshal(data, cfg); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", p, err)
 		}
+		result.ConfigPath = p
 		break
 	}
 
@@ -142,7 +156,7 @@ func Load() (*Config, error) {
 		cfg.LLM.APIKey = key
 	}
 
-	return cfg, nil
+	return result, nil
 }
 
 // Init writes a default config file to the current directory.

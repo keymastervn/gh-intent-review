@@ -30,11 +30,16 @@ var configShowCmd = &cobra.Command{
 	Use:   "show",
 	Short: "Display the current configuration",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cfg, err := config.Load()
+		loaded, err := config.Load("")
 		if err != nil {
 			return fmt.Errorf("loading config: %w", err)
 		}
-		fmt.Fprint(os.Stdout, cfg.String())
+		if loaded.ConfigPath != "" {
+			fmt.Fprintf(os.Stderr, "# Config loaded from: %s\n", loaded.ConfigPath)
+		} else {
+			fmt.Fprintf(os.Stderr, "# No config file found — showing defaults\n")
+		}
+		fmt.Fprint(os.Stdout, loaded.Config.String())
 		return nil
 	},
 }

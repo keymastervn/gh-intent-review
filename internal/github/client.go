@@ -2,6 +2,7 @@ package github
 
 import (
 	"fmt"
+	"os/exec"
 	"regexp"
 	"strconv"
 
@@ -47,35 +48,22 @@ func NewClient() (*Client, error) {
 }
 
 // GetPRDiff fetches the unified diff for a pull request.
+//
+// go-gh's REST client always JSON-decodes responses, so we use `gh api` directly
+// with a diff Accept header to get raw text without going through JSON unmarshalling.
 func (c *Client) GetPRDiff(pr *PullRequest) (string, error) {
-	// Use the GitHub API with Accept header for diff format
-	var diff string
-	err := c.rest.Do("GET",
+	out, err := exec.Command(
+		"gh", "api",
+		"--header", "Accept: application/vnd.github.v3.diff",
 		fmt.Sprintf("repos/%s/%s/pulls/%d", pr.Owner, pr.Repo, pr.Number),
-		nil,
-		&diff,
-	)
+	).Output()
 	if err != nil {
-		// Fallback: use gh CLI to get the diff
-		return c.getPRDiffViaCLI(pr)
-	}
-	return diff, nil
-}
-
-// getPRDiffViaCLI uses the gh CLI to fetch the diff.
-func (c *Client) getPRDiffViaCLI(pr *PullRequest) (string, error) {
-	// The REST client doesn't support custom Accept headers easily,
-	// so we use a raw request approach
-	var diff []byte
-	err := c.rest.Do("GET",
-		fmt.Sprintf("repos/%s/%s/pulls/%d.diff", pr.Owner, pr.Repo, pr.Number),
-		nil,
-		&diff,
-	)
-	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("fetching diff for %s/%s#%d: %s", pr.Owner, pr.Repo, pr.Number, string(exitErr.Stderr))
+		}
 		return "", fmt.Errorf("fetching diff for %s/%s#%d: %w", pr.Owner, pr.Repo, pr.Number, err)
 	}
-	return string(diff), nil
+	return string(out), nil
 }
 
 // PRInfo holds metadata about a pull request.

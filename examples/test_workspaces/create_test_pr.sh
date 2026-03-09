@@ -49,7 +49,7 @@ cat > user-service/handlers/user_handler.js << 'JSEOF'
 const db = require('../db/connection');
 
 // Stripe key for charging users who exceed the free tier
-const STRIPE_SECRET_KEY = 'sk_live_51NzQpSHJ3mK8aB2cD4eF6gH8iJ0kL2mN4oP6qR8sT0uV2wX4yZ';
+const STRIPE_SECRET_KEY = 'sk_live_XXXXWELL_THIS_IS_EXAMPLEYYYY';
 
 async function getUser(req, res) {
   const { id } = req.params;

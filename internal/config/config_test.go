@@ -84,10 +84,11 @@ review:
 	os.Chdir(tmpDir)
 	defer os.Chdir(origDir)
 
-	cfg, err := Load()
+	loaded, err := Load("")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	cfg := loaded.Config
 
 	if cfg.LLM.Provider != "openai" {
 		t.Errorf("expected provider 'openai', got %q", cfg.LLM.Provider)
@@ -132,11 +133,11 @@ func TestEnvVarOverride(t *testing.T) {
 
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-123")
 
-	cfg, err := Load()
+	loaded, err := Load("")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.LLM.APIKey != "test-key-123" {
-		t.Errorf("expected API key from env var, got %q", cfg.LLM.APIKey)
+	if loaded.Config.LLM.APIKey != "test-key-123" {
+		t.Errorf("expected API key from env var, got %q", loaded.Config.LLM.APIKey)
 	}
 }
