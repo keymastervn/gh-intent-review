@@ -1,0 +1,58 @@
+diff --git a/src/handlers/user_handler.js b/src/handlers/user_handler.js
+--- a/src/handlers/user_handler.js
++++ b/src/handlers/user_handler.js
+@@ -10,6 +10,18 @@
+ const express = require('express');
+
+ async function updateUser(req, res) {
++  const query = "SELECT * FROM users WHERE id = " + req.params.id;
++  const users = await db.execute(query);
+   const user = users[0];
+
++  const enriched = [];
++  for (let i = 0; i < users.length; i++) {
++    const profile = await fetchProfile(users[i].id);
++    enriched.push({ ...users[i], profile });
++  }
++
+   user.name = req.body.name;
+   await db.execute("UPDATE users SET name = ? WHERE id = ?", [user.name, user.id]);
+
++  sendSlackNotification(`User ${user.name} updated`);
++
+   res.json({ ok: true });
+ }
+diff --git a/src/utils/cache.js b/src/utils/cache.js
+--- a/src/utils/cache.js
++++ b/src/utils/cache.js
+@@ -5,3 +5,8 @@
+ const redis = require('redis');
+
++async function getCachedProfile(id) {
++  const cacheKey = `user:${id}:profile`;
++  return redis.get(cacheKey);
++}
+
+¿!! b/src/handlers/user_handler.js
+@@ +12,1 @@
++  const query = "SELECT * FROM users WHERE id = " + req.params.id;
+-{¿! SQL injection — user input concatenated directly into query string, use parameterized queries ¿!}
+
+¿~~ b/src/handlers/user_handler.js
+@@ +17,3 @@
++  for (let i = 0; i < users.length; i++) {
++    const profile = await fetchProfile(users[i].id);
++    enriched.push({ ...users[i], profile });
+-{¿~ N+1 query — sequential await in loop, use Promise.all() for parallel fetching ¿~}
+   }
+
+¿## b/src/handlers/user_handler.js
+@@ +25,1 @@
++  sendSlackNotification(`User ${user.name} updated`);
+-{¿# Cohesion — user handler shouldn't own notification logic, emit a domain event instead ¿#}
+   res.json({ ok: true });
+
+¿== b/src/utils/cache.js
+@@ +8,1 @@
++  const cacheKey = `user:${id}:profile`;
+-{¿= DRY — this cache key pattern is duplicated in user_handler.js:30 and admin_handler.js:15, extract a key builder ¿=}
