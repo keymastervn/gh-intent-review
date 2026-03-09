@@ -22,10 +22,13 @@ type Config struct {
 
 // LLMConfig configures the AI provider used for review.
 type LLMConfig struct {
-	Provider string `yaml:"provider"` // "anthropic", "openai", "ollama", etc.
+	Provider string `yaml:"provider"` // "anthropic", "openai", "ollama", "agent"
 	Model    string `yaml:"model"`
 	APIKey   string `yaml:"api_key,omitempty"` // can also use env vars
 	BaseURL  string `yaml:"base_url,omitempty"`
+
+	// Agent provider settings (provider: agent)
+	AgentCommand string `yaml:"agent_command,omitempty"` // CLI binary to invoke (default: "claude")
 }
 
 // ReviewConfig controls the review process.

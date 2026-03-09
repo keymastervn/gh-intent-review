@@ -15,7 +15,9 @@ func NewProvider(cfg *config.Config) (LLMProvider, error) {
 		return NewOpenAIProvider(cfg.LLM)
 	case "ollama":
 		return NewOllamaProvider(cfg.LLM)
+	case "agent":
+		return NewAgentProvider(cfg.LLM)
 	default:
-		return nil, fmt.Errorf("unsupported LLM provider: %s (supported: anthropic, openai, ollama)", cfg.LLM.Provider)
+		return nil, fmt.Errorf("unsupported LLM provider: %s (supported: anthropic, openai, ollama, agent)", cfg.LLM.Provider)
 	}
 }

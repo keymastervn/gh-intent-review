@@ -90,6 +90,9 @@ gh intent-review generate --provider openai --model gpt-4o https://github.com/ow
 # Use a local Ollama model
 gh intent-review generate --provider ollama --model llama3 https://github.com/owner/repo/pull/123
 
+# Use an installed CLI agent (e.g. Claude Code) — agent traverses $PWD for context
+gh intent-review generate --provider agent https://github.com/owner/repo/pull/123
+
 # Control parallelism
 gh intent-review generate -p 8 https://github.com/owner/repo/pull/123
 
@@ -132,10 +135,13 @@ Create `.gh-intent-review.yml` in your project root (or home directory for globa
 
 ```yaml
 llm:
-  provider: anthropic              # anthropic, openai, ollama
+  provider: anthropic              # anthropic, openai, ollama, agent
   model: claude-sonnet-4-6        # model name
   # api_key: sk-...               # or use env vars (preferred)
   # base_url: http://localhost:11434/api/generate  # for ollama/custom endpoints
+
+  # Agent provider (provider: agent) — delegates to a locally installed CLI agent
+  # agent_command: claude          # binary in PATH (default: "claude")
 
 review:
   parallel: 4                      # concurrent file reviews
