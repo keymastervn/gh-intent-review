@@ -83,6 +83,7 @@ const (
 	IntentApproved    IntentStatus = "approved"
 	IntentDisapproved IntentStatus = "disapproved"
 	IntentSkipped     IntentStatus = "skipped"
+	IntentCommented   IntentStatus = "commented"
 )
 
 // intentCommentRegex matches -{¿X ...¿X} on a comment line.
