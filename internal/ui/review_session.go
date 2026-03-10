@@ -255,6 +255,9 @@ func renderIntentForReview(current, total int, intent diff.Intent) {
 	reset := "\033[0m"
 
 	fmt.Printf("  [%d/%d] %s¿%s %s%s\n", current, total, severityColor, intent.Symbol, intent.Name, reset)
+	if intent.StartLine > 0 {
+		fmt.Printf("  \033[2m%s:%d\033[0m\n", intent.FilePath, intent.StartLine)
+	}
 
 	if len(intent.AffectedLines) > 0 {
 		for _, line := range intent.AffectedLines {
