@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -94,6 +95,9 @@ var intentCommentRegex = regexp.MustCompile(`^-\{¿([!~$&#=?])\s+(.*?)\s*¿[!~$&
 // intentBlockHeaderRegex matches ¿XX b/path lines (doubled symbol).
 // Go's RE2 doesn't support backreferences, so we list each doubled pair.
 var intentBlockHeaderRegex = regexp.MustCompile(`^¿(!!|~~|\$\$|&&|##|==|\?\?)\s+b/(.+)$`)
+
+// hunkStartLineRegex extracts the start line number from intent hunk headers like "@@ +10,2 @@".
+var hunkStartLineRegex = regexp.MustCompile(`^@@\s*\+(\d+)(?:,\d+)?\s*@@`)
 
 // TotalIntents returns the total number of intents across all files.
 func (fd *FocusedDiff) TotalIntents() int {
@@ -324,9 +328,14 @@ func ParseIntentionalDiff(text string) (*FocusedDiff, error) {
 				break
 			}
 
-			// Hunk header
+			// Hunk header — extract StartLine from @@ +N,M @@
 			if strings.HasPrefix(bodyLine, "@@") {
 				intent.HunkHeader = bodyLine
+				if m := hunkStartLineRegex.FindStringSubmatch(bodyLine); m != nil {
+					if n, err := strconv.Atoi(m[1]); err == nil {
+						intent.StartLine = n
+					}
+				}
 				i++
 				continue
 			}

@@ -79,6 +79,9 @@ func TestParseIntentionalDiff_SingleIntent(t *testing.T) {
 	if intent.HunkHeader != "@@ +2,1 @@" {
 		t.Errorf("expected hunk header '@@ +2,1 @@', got %q", intent.HunkHeader)
 	}
+	if intent.StartLine != 2 {
+		t.Errorf("expected StartLine 2, got %d", intent.StartLine)
+	}
 	// Context lines
 	if len(intent.ContextLines) != 1 || intent.ContextLines[0] != "}" {
 		t.Errorf("expected 1 context line '}', got %v", intent.ContextLines)
@@ -378,6 +381,9 @@ func TestWriteAndReadRoundTrip(t *testing.T) {
 	}
 	if len(intent.AffectedLines) != 1 {
 		t.Errorf("expected 1 affected line, got %d", len(intent.AffectedLines))
+	}
+	if intent.StartLine != 2 {
+		t.Errorf("expected StartLine 2, got %d", intent.StartLine)
 	}
 }
 
