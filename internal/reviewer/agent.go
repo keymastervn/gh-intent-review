@@ -9,6 +9,7 @@ import (
 
 	"github.com/keymastervn/gh-intent-review/internal/config"
 	"github.com/keymastervn/gh-intent-review/internal/diff"
+	"github.com/keymastervn/gh-intent-review/internal/github"
 )
 
 // AgentProvider implements LLMProvider by invoking a locally installed CLI agent
@@ -37,8 +38,8 @@ func NewAgentProvider(cfg config.LLMConfig) (*AgentProvider, error) {
 }
 
 // ReviewAll runs the agent CLI to review all file diffs in a single session.
-func (p *AgentProvider) ReviewAll(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol, severity, prURL string) ([]diff.Intent, error) {
-	prompt := buildAgentPrompt(fileDiffs, symbols, prURL)
+func (p *AgentProvider) ReviewAll(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol, severity, prURL string, existingComments []github.PRComment) ([]diff.Intent, error) {
+	prompt := buildAgentPrompt(fileDiffs, symbols, prURL, existingComments)
 	systemPrompt := buildAgentSystemPrompt(symbols, severity)
 
 	args := []string{"-p", prompt, "--output-format", "json", "--append-system-prompt", systemPrompt}
@@ -150,7 +151,7 @@ Rules:
 }
 
 // buildAgentPrompt builds the prompt for the agent with all file diffs concatenated.
-func buildAgentPrompt(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol, prURL string) string {
+func buildAgentPrompt(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol, prURL string, existingComments []github.PRComment) string {
 	var b strings.Builder
 
 	cwd, err := os.Getwd()
@@ -167,6 +168,18 @@ func buildAgentPrompt(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol, 
 			"trace call sites, or search for patterns when assessing impact.\n\n",
 		cwd,
 	))
+
+	if len(existingComments) > 0 {
+		b.WriteString("Existing reviewer comments (do NOT re-flag concerns already raised here):\n")
+		for _, c := range existingComments {
+			if c.File != "" {
+				b.WriteString(fmt.Sprintf("  [%s] %s:%d — %s\n", c.Author, c.File, c.Line, c.Body))
+			} else {
+				b.WriteString(fmt.Sprintf("  [%s] %s\n", c.Author, c.Body))
+			}
+		}
+		b.WriteString("\n")
+	}
 	b.WriteString("Diff:\n```diff\n")
 	for _, fd := range fileDiffs {
 		b.WriteString(fd.String())

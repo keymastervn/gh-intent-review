@@ -8,6 +8,7 @@ import (
 
 	"github.com/keymastervn/gh-intent-review/internal/config"
 	"github.com/keymastervn/gh-intent-review/internal/diff"
+	"github.com/keymastervn/gh-intent-review/internal/github"
 )
 
 // Engine orchestrates agentic review of all file diffs in a single session.
@@ -21,7 +22,8 @@ type LLMProvider interface {
 	// ReviewAll reviews all file diffs in one agent session and returns all intents found.
 	// prURL is the full GitHub PR URL (e.g. https://github.com/owner/repo/pull/123).
 	// severity is the minimum impact threshold ("" or "none" = report everything).
-	ReviewAll(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol, severity, prURL string) ([]diff.Intent, error)
+	// existingComments are already-posted reviewer comments the agent should not re-flag.
+	ReviewAll(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol, severity, prURL string, existingComments []github.PRComment) ([]diff.Intent, error)
 }
 
 // NewEngine creates a new review engine with the configured LLM provider.
@@ -35,7 +37,8 @@ func NewEngine(cfg *config.Config) (*Engine, error) {
 
 // Review runs a single-session review across all file diffs and returns a FocusedDiff.
 // prURL is the full GitHub PR URL passed to the agent for codebase context.
-func (e *Engine) Review(fileDiffs []diff.FileDiff, prURL string) (*diff.FocusedDiff, error) {
+// existingComments are already-posted reviewer comments; the agent will avoid re-flagging them.
+func (e *Engine) Review(fileDiffs []diff.FileDiff, prURL string, existingComments []github.PRComment) (*diff.FocusedDiff, error) {
 	symbols := e.cfg.EnabledSymbols()
 
 	// Build raw diff string from all files.
@@ -61,7 +64,7 @@ func (e *Engine) Review(fileDiffs []diff.FileDiff, prURL string) (*diff.FocusedD
 	}
 
 	stopSpinner := spinner("Agent thinking...")
-	intents, err := e.provider.ReviewAll(filtered, symbols, e.cfg.Intents.Severity, prURL)
+	intents, err := e.provider.ReviewAll(filtered, symbols, e.cfg.Intents.Severity, prURL, existingComments)
 	stopSpinner()
 	if err != nil {
 		return nil, fmt.Errorf("agent review failed: %w", err)

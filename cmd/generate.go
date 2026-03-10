@@ -106,12 +106,22 @@ func generateIntentDiff(cfg *config.Config, client *github.Client, pr *github.Pu
 
 	fmt.Fprintf(os.Stderr, "Running agent review on %d file(s)...\n", len(fileDiffs))
 
+	// Fetch existing reviewer comments so the agent can skip already-raised concerns.
+	existingComments, err := client.GetPRExistingComments(pr)
+	if err != nil {
+		// Non-fatal: warn and continue without existing comment context.
+		fmt.Fprintf(os.Stderr, "Warning: could not fetch existing comments: %v\n", err)
+		existingComments = nil
+	} else if len(existingComments) > 0 {
+		fmt.Fprintf(os.Stderr, "Loaded %d existing reviewer comment(s)\n", len(existingComments))
+	}
+
 	engine, err := reviewer.NewEngine(cfg)
 	if err != nil {
 		return fmt.Errorf("creating review engine: %w", err)
 	}
 
-	focusedDiff, err := engine.Review(fileDiffs, prURL)
+	focusedDiff, err := engine.Review(fileDiffs, prURL, existingComments)
 	if err != nil {
 		return fmt.Errorf("running review: %w", err)
 	}

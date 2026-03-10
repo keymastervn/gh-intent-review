@@ -118,6 +118,72 @@ func (c *Client) PostPRLineComment(pr *PullRequest, commitSHA, path string, line
 	return nil
 }
 
+// PRComment represents a reviewer comment already posted on the pull request.
+// File and Line are populated for line-specific review comments; empty/zero for general PR comments.
+type PRComment struct {
+	Author string
+	Body   string
+	File   string // relative file path; empty for general PR comments
+	Line   int    // line number in new file; 0 for general PR comments
+}
+
+// GetPRExistingComments fetches all existing reviewer comments on the PR:
+// both line-specific pull request review comments and general issue comments.
+func (c *Client) GetPRExistingComments(pr *PullRequest) ([]PRComment, error) {
+	var comments []PRComment
+
+	// Line-specific review comments (Files Changed tab)
+	var reviewComments []struct {
+		User struct {
+			Login string `json:"login"`
+		} `json:"user"`
+		Body         string `json:"body"`
+		Path         string `json:"path"`
+		Line         int    `json:"line"`
+		OriginalLine int    `json:"original_line"`
+	}
+	if err := c.rest.Get(
+		fmt.Sprintf("repos/%s/%s/pulls/%d/comments", pr.Owner, pr.Repo, pr.Number),
+		&reviewComments,
+	); err != nil {
+		return nil, fmt.Errorf("fetching review comments: %w", err)
+	}
+	for _, rc := range reviewComments {
+		line := rc.Line
+		if line == 0 {
+			line = rc.OriginalLine
+		}
+		comments = append(comments, PRComment{
+			Author: rc.User.Login,
+			Body:   rc.Body,
+			File:   rc.Path,
+			Line:   line,
+		})
+	}
+
+	// General PR (issue) comments (Conversation tab)
+	var issueComments []struct {
+		User struct {
+			Login string `json:"login"`
+		} `json:"user"`
+		Body string `json:"body"`
+	}
+	if err := c.rest.Get(
+		fmt.Sprintf("repos/%s/%s/issues/%d/comments", pr.Owner, pr.Repo, pr.Number),
+		&issueComments,
+	); err != nil {
+		return nil, fmt.Errorf("fetching issue comments: %w", err)
+	}
+	for _, ic := range issueComments {
+		comments = append(comments, PRComment{
+			Author: ic.User.Login,
+			Body:   ic.Body,
+		})
+	}
+
+	return comments, nil
+}
+
 // PRInfo holds metadata about a pull request.
 type PRInfo struct {
 	Title string `json:"title"`
