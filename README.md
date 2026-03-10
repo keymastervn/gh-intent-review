@@ -135,16 +135,11 @@ Create `.gh-intent-review.yml` in your project root (or home directory for globa
 
 ```yaml
 llm:
-  provider: anthropic              # anthropic, openai, ollama, agent
-  model: claude-sonnet-4-6        # model name
-  # api_key: sk-...               # or use env vars (preferred)
-  # base_url: http://localhost:11434/api/generate  # for ollama/custom endpoints
-
-  # Agent provider (provider: agent) — delegates to a locally installed CLI agent
-  # agent_command: claude          # binary in PATH (default: "claude")
+  provider: agent                  # only "agent" is supported
+  # model: claude-sonnet-4-6      # passed to the agent via --model (optional)
+  # agent_command: claude          # CLI binary in PATH (default: "claude")
 
 review:
-  parallel: 4                      # concurrent file reviews
   ignore_files:                    # skip these files
     - "*.lock"
     - "*.sum"
@@ -154,8 +149,14 @@ review:
   #   - "src/**"
   #   - "lib/**"
   # custom_prompt: "Also check for Rails-specific security issues"
+  # check_and_fetch: true          # auto-regenerate diff when the PR head changes
 
 intents:
+  # severity: minor                # global threshold: none (default), trivial, minor, major, critical
+  #                                # Symbols whose typical severity is below the threshold are
+  #                                # excluded from the agent prompt entirely.
+  #                                # Within included symbols the agent still judges each instance
+  #                                # and skips findings below the threshold.
   symbols:
     # Reliability
     - symbol: "!"
@@ -163,37 +164,44 @@ intents:
       description: "Vulnerabilities: SQL injection, XSS, exposed secrets"
       enabled: true
       category: reliability
+      severity: critical           # per-symbol typical severity
     - symbol: "~"
       name: Performance Drag
       description: "Latency, slow execution, performance bottlenecks"
       enabled: true
       category: reliability
+      severity: major
     - symbol: "$"
       name: Resource Cost
       description: "Expensive operations, memory leaks, compute waste"
       enabled: false               # opt-in
       category: reliability
+      severity: major
     # Form
     - symbol: "&"
       name: Coupling Violation
       description: "Tight coupling, hardcoded dependencies"
       enabled: true
       category: form
+      severity: minor
     - symbol: "#"
       name: Cohesion / SOLID Issue
       description: "Low cohesion, single responsibility violations"
       enabled: true
       category: form
+      severity: minor
     - symbol: "="
       name: DRY Violation
       description: "Code duplication, repeated logic"
       enabled: true
       category: form
+      severity: trivial
     - symbol: "?"
       name: KISS Violation
       description: "Overly clever, deeply nested, hard to read code"
       enabled: true
       category: form
+      severity: trivial
 
 output:
   dir: ""                            # empty = ~/.gh-intent-review/ (default)
@@ -201,14 +209,31 @@ output:
   format: text
 ```
 
-### Environment Variables
+### Severity threshold
 
-| Variable | Description |
-|----------|-------------|
-| `ANTHROPIC_API_KEY` | API key for Anthropic (Claude) |
-| `OPENAI_API_KEY` | API key for OpenAI |
+The `intents.severity` setting filters noise by impact level:
 
-These take precedence when `api_key` is not set in the config file.
+| Value | Effect |
+|-------|--------|
+| `none` (default) | Report all findings regardless of impact |
+| `trivial` | Report everything (same as none in practice) |
+| `minor` | Skip trivial cosmetic issues; keep real quality problems |
+| `major` | Only report significant reliability and design issues |
+| `critical` | Only report security, data-integrity, and stability risks |
+
+Two levels of filtering apply:
+
+1. **Symbol exclusion** — symbols whose `severity` is below the global threshold are removed from the agent prompt entirely (e.g. `severity: major` drops DRY and KISS violations before the agent runs).
+2. **Instance judgement** — for included symbols, the agent evaluates each specific finding and skips instances that don't meet the threshold in practice (e.g. a trivial coupling issue is skipped even though `&` is included).
+
+**Example — only security and performance, no form issues:**
+
+```yaml
+intents:
+  severity: major
+```
+
+With the defaults above, this keeps `!` (critical) and `~` (major) in the prompt and silently drops `&`, `#`, `=`, `?` (all minor/trivial).
 
 ## Using with Claude Code
 

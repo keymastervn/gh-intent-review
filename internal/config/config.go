@@ -41,12 +41,14 @@ type IntentSymbol struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
 	Enabled     bool   `yaml:"enabled"`
-	Category    string `yaml:"category"` // "reliability" or "form"
+	Category    string `yaml:"category"`           // "reliability" or "form"
+	Severity    string `yaml:"severity,omitempty"` // trivial, minor, major, critical
 }
 
-// IntentsConfig controls which intent symbols are active.
+// IntentsConfig controls which intent symbols are active and the minimum severity to report.
 type IntentsConfig struct {
-	Symbols []IntentSymbol `yaml:"symbols"`
+	Symbols  []IntentSymbol `yaml:"symbols"`
+	Severity string         `yaml:"severity,omitempty"` // none (default), trivial, minor, major, critical
 }
 
 // OutputConfig controls where and how diffs are stored.
@@ -83,14 +85,14 @@ func DefaultConfig() *Config {
 func DefaultIntentSymbols() []IntentSymbol {
 	return []IntentSymbol{
 		// Reliability
-		{Symbol: "!", Name: "Security Risk", Description: "Vulnerabilities: SQL injection, XSS, exposed secrets, etc.", Enabled: true, Category: "reliability"},
-		{Symbol: "~", Name: "Performance Drag", Description: "Latency, slow execution, performance bottlenecks.", Enabled: true, Category: "reliability"},
-		{Symbol: "$", Name: "Resource Cost", Description: "Expensive operations, memory leaks, compute waste.", Enabled: false, Category: "reliability"},
+		{Symbol: "!", Name: "Security Risk", Description: "Vulnerabilities: SQL injection, XSS, exposed secrets, etc.", Enabled: true, Category: "reliability", Severity: "critical"},
+		{Symbol: "~", Name: "Performance Drag", Description: "Latency, slow execution, performance bottlenecks.", Enabled: true, Category: "reliability", Severity: "major"},
+		{Symbol: "$", Name: "Resource Cost", Description: "Expensive operations, memory leaks, compute waste.", Enabled: false, Category: "reliability", Severity: "major"},
 		// Form
-		{Symbol: "&", Name: "Coupling Violation", Description: "Tight coupling, hardcoded dependencies.", Enabled: true, Category: "form"},
-		{Symbol: "#", Name: "Cohesion / SOLID Issue", Description: "Low cohesion, single responsibility violations.", Enabled: true, Category: "form"},
-		{Symbol: "=", Name: "DRY Violation", Description: "Code duplication, repeated logic.", Enabled: true, Category: "form"},
-		{Symbol: "?", Name: "KISS Violation", Description: "Overly clever, deeply nested, hard to read code.", Enabled: true, Category: "form"},
+		{Symbol: "&", Name: "Coupling Violation", Description: "Tight coupling, hardcoded dependencies.", Enabled: true, Category: "form", Severity: "minor"},
+		{Symbol: "#", Name: "Cohesion / SOLID Issue", Description: "Low cohesion, single responsibility violations.", Enabled: true, Category: "form", Severity: "minor"},
+		{Symbol: "=", Name: "DRY Violation", Description: "Code duplication, repeated logic.", Enabled: true, Category: "form", Severity: "trivial"},
+		{Symbol: "?", Name: "KISS Violation", Description: "Overly clever, deeply nested, hard to read code.", Enabled: true, Category: "form", Severity: "trivial"},
 	}
 }
 

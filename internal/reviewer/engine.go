@@ -18,7 +18,8 @@ type Engine struct {
 // LLMProvider is the interface any AI backend must implement.
 type LLMProvider interface {
 	// ReviewAll reviews all file diffs in one agent session and returns all intents found.
-	ReviewAll(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol) ([]diff.Intent, error)
+	// severity is the minimum impact threshold ("" or "none" = report everything).
+	ReviewAll(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol, severity string) ([]diff.Intent, error)
 }
 
 // NewEngine creates a new review engine with the configured LLM provider.
@@ -56,7 +57,7 @@ func (e *Engine) Review(fileDiffs []diff.FileDiff) (*diff.FocusedDiff, error) {
 		fmt.Printf("  %s\n", fd.NewName)
 	}
 
-	intents, err := e.provider.ReviewAll(filtered, symbols)
+	intents, err := e.provider.ReviewAll(filtered, symbols, e.cfg.Intents.Severity)
 	if err != nil {
 		return nil, fmt.Errorf("agent review failed: %w", err)
 	}

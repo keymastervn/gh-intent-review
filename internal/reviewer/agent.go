@@ -37,9 +37,9 @@ func NewAgentProvider(cfg config.LLMConfig) (*AgentProvider, error) {
 }
 
 // ReviewAll runs the agent CLI to review all file diffs in a single session.
-func (p *AgentProvider) ReviewAll(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol) ([]diff.Intent, error) {
+func (p *AgentProvider) ReviewAll(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol, severity string) ([]diff.Intent, error) {
 	prompt := buildAgentPrompt(fileDiffs, symbols)
-	systemPrompt := buildAgentSystemPrompt(symbols)
+	systemPrompt := buildAgentSystemPrompt(symbols, severity)
 
 	args := []string{"-p", prompt, "--output-format", "json", "--append-system-prompt", systemPrompt}
 	if p.model != "" {
@@ -72,17 +72,65 @@ func (p *AgentProvider) ReviewAll(fileDiffs []diff.FileDiff, symbols []config.In
 	return parseLLMResponse(envelope.Result, fileDiffs, symbols)
 }
 
+// severityLevel maps a severity name to a numeric rank for comparison.
+// Returns 0 for "" or "none" (no threshold).
+func severityLevel(s string) int {
+	switch s {
+	case "trivial":
+		return 1
+	case "minor":
+		return 2
+	case "major":
+		return 3
+	case "critical":
+		return 4
+	default:
+		return 0
+	}
+}
+
 // buildAgentSystemPrompt constructs the --append-system-prompt content describing
-// what intent categories to look for and the expected JSON output schema.
-func buildAgentSystemPrompt(symbols []config.IntentSymbol) string {
+// what intent categories to look for, the severity threshold, and the expected JSON schema.
+//
+// severity is the global minimum threshold ("", "none", "trivial", "minor", "major", "critical").
+// Symbols whose per-symbol severity is below the global threshold are excluded from the prompt
+// entirely — the agent won't be asked to look for them at all.
+func buildAgentSystemPrompt(symbols []config.IntentSymbol, severity string) string {
 	var b strings.Builder
+	threshold := severityLevel(severity)
+
+	// Filter to symbols at or above the global threshold.
+	var applicable []config.IntentSymbol
+	for _, s := range symbols {
+		if threshold == 0 || severityLevel(s.Severity) >= threshold {
+			applicable = append(applicable, s)
+		}
+	}
 
 	b.WriteString("You are performing an intent-focused code review. ")
 	b.WriteString("Your job is to identify only meaningful issues — not style nitpicks.\n\n")
 	b.WriteString("Intent symbols you must use:\n")
-	for _, s := range symbols {
-		b.WriteString(fmt.Sprintf("  ¿%s  %s: %s\n", s.Symbol, s.Name, s.Description))
+	for _, s := range applicable {
+		severityTag := ""
+		if s.Severity != "" {
+			severityTag = fmt.Sprintf(" [typical severity: %s]", s.Severity)
+		}
+		b.WriteString(fmt.Sprintf("  ¿%s  %s%s: %s\n", s.Symbol, s.Name, severityTag, s.Description))
 	}
+
+	if threshold > 0 {
+		b.WriteString(fmt.Sprintf(`
+Severity threshold: %s
+Before flagging any issue, assess its real-world impact against this scale:
+  trivial  — cosmetic or purely theoretical; negligible real-world effect
+  minor    — modest quality or maintainability impact; unlikely to cause runtime problems
+  major    — meaningful impact on reliability, correctness, or significant performance
+  critical — high impact: security vulnerabilities, data loss, or production instability
+Even within an enabled symbol category, only report findings whose specific instance
+is "%s" or higher in practice. Silently skip anything below this threshold.
+`, severity, severity))
+	}
+
 	b.WriteString(`
 Output ONLY a JSON array. Each element:
   {"symbol": "!", "file": "path/to/file.ext", "lines": ["exact code line"], "start_line": 12, "comment": "concise explanation"}
