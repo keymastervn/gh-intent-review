@@ -33,6 +33,14 @@ diff --git a/handler.js b/handler.js
 gh extension install keymastervn/gh-intent-review
 ```
 
+Then install the default config:
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/keymastervn/gh-intent-review/main/install.sh | bash
+```
+
+This creates `~/.gh-intent-review.yml` from the bundled example if one does not already exist.
+
 Or build from source:
 
 ```bash
@@ -45,10 +53,11 @@ gh extension install .
 ## Quick Start
 
 ```bash
-# 1. Generate an intent-focused diff for a PR
+# (optional) Generate an intent-focused diff for a PR
 gh intent-review generate https://github.com/owner/repo/pull/123
 
-# 2. Interactively review the intents
+# As you have the setting `check_and_fetch: true`, you may not need the above step
+# Interactively review the intents
 gh intent-review review https://github.com/owner/repo/pull/123
 ```
 
@@ -84,18 +93,6 @@ Fetches the PR diff, runs parallel AI review on each file, and produces an inten
 ```bash
 gh intent-review generate https://github.com/owner/repo/pull/123
 
-# Override the LLM provider/model
-gh intent-review generate --provider openai --model gpt-4o https://github.com/owner/repo/pull/123
-
-# Use a local Ollama model
-gh intent-review generate --provider ollama --model llama3 https://github.com/owner/repo/pull/123
-
-# Use an installed CLI agent (e.g. Claude Code) — agent traverses $PWD for context
-gh intent-review generate --provider agent https://github.com/owner/repo/pull/123
-
-# Control parallelism
-gh intent-review generate -p 8 https://github.com/owner/repo/pull/123
-
 # Custom output path
 gh intent-review generate -o ./my-review/123.intentional.diff https://github.com/owner/repo/pull/123
 ```
@@ -106,17 +103,24 @@ Output is stored at `~/.gh-intent-review/<owner>/<repo>/<pr>.intentional.diff` b
 
 Opens an interactive session to walk through each intent. For each one you can:
 
-- **[a]pprove** — mark as acceptable
-- **[d]isapprove** — flag with a comment
-- **[s]kip** — move on
+- **[e]laborate** — ask the AI to explain the issue in more detail
+- **[c]omment** — edit and post a review comment on the PR at the exact line
+- **[o]pen** — open the PR's Files tab in the browser, anchored to the flagged line
+- **[s]kip** — move on without commenting
 - **[q]uit** — end the session
 
 ```
   [1/4] ¿! Security Risk
+  handler.js:12
   +  const query = "SELECT * FROM users WHERE id = " + req.params.id;
   SQL injection — use parameterized queries
 
-  [a]pprove  [d]isapprove  [s]kip  [q]uit →
+  [e]laborate  [c]omment  [o]pen  [s]kip  [q]uit →
+```
+
+```bash
+# Always regenerate the intentional diff before reviewing (bypass cached file)
+gh intent-review review --force-fetch https://github.com/owner/repo/pull/123
 ```
 
 ### `config init` / `config show`
@@ -276,24 +280,6 @@ With the defaults above, this keeps `!` (critical) and `~` (major) in the prompt
 
 `gh-intent-review` pairs well with [Claude Code](https://claude.com/claude-code) as part of an agentic development workflow.
 
-### As a Claude Code hook
-
-Configure a hook in `.claude/hooks.json` to auto-generate intent reviews when PRs are created:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "pattern": "gh pr create",
-        "command": "gh intent-review generate $(gh pr view --json url -q .url) 2>/dev/null || true"
-      }
-    ]
-  }
-}
-```
-
 ### Interactive review with Claude Code
 
 Ask Claude Code to interpret the results:
@@ -311,17 +297,35 @@ Claude Code will:
 ### Team workflow
 
 ```bash
-# CI or team lead pre-generates the intentional diff for a PR
+# CI or team lead pre-generates the intentional diff for a PR then push it to a server {roadmap}
 gh intent-review generate https://github.com/org/repo/pull/456
 
 # Reviewer walks through intents interactively
-gh intent-review review https://github.com/org/repo/pull/456
-
-# Or ask Claude Code to handle the review
-# "Review PR #456 using gh intent-review and summarize the findings"
+gh intent-review review --force-fetch https://github.com/org/repo/pull/456
 ```
 
-### Implementer self-review (optional)
+### As a Claude Code hook (NOT RECOMMENDED)
+
+> This is the HARDWAY, your AGENTS.md or plugin tools must review the issues during implementation
+
+Configure a hook in `.claude/hooks.json` to auto-generate intent reviews when PRs are created:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "pattern": "gh pr create",
+        "command": "gh intent-review generate $(gh pr view --json url -q .url) 2>/dev/null || true"
+      }
+    ]
+  }
+}
+```
+
+
+### Implementer self-review (optional, NOT RECOMMENDED)
 
 Implementers can install the extension to catch issues before submitting for review:
 
@@ -334,7 +338,7 @@ gh intent-review review https://github.com/org/repo/pull/456
 
 ## Intent Notation
 
-All symbols use the `¿` prefix to avoid collision with standard diff `+`/`-` notation. In intent blocks, symbols are doubled for the header (`¿!!`, `¿~~`, etc.).
+All symbols use the `¿` prefix to avoid collision with standard diff `+`/`-` notation. In intent blocks, symbols are doubled for the header (`¿!!`, `¿~~`, etc.). You are free to define as many notions as possible eg. `>` for `Race Condition` as long as they are compatible with git-diff
 
 | Symbol | Block Header | Category | Name | What it flags |
 |--------|-------------|----------|------|---------------|

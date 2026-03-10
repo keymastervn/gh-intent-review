@@ -1,0 +1,58 @@
+llm:
+    provider: agent
+    agent_command: claude
+    model: claude-sonnet-4-6
+    # provider: custom
+    # agent_command: claude
+    # model: nvidia/nemotron-3-nano-30b-a3b:free
+    # base_url: https://openrouter.ai/api
+    # api_key: sk-or-v1-xxxxxxxxxxxxxxxxxxxx
+review:
+    auto_approved: false
+    check_and_fetch: true
+    parallel: 4
+    ignore_files:
+        - '*.lock'
+        - '*.sum'
+        - vendor/**
+        - node_modules/**
+intents:
+    symbols:
+        - symbol: '!'
+          name: Security Risk
+          description: 'Vulnerabilities: SQL injection, XSS, exposed secrets, etc.'
+          enabled: true
+          category: reliability
+        - symbol: "~"
+          name: Performance Drag
+          description: Latency, slow execution, performance bottlenecks.
+          enabled: true
+          category: reliability
+        - symbol: $
+          name: Resource Cost
+          description: Expensive operations, memory leaks, compute waste.
+          enabled: false
+          category: reliability
+        - symbol: '&'
+          name: Coupling Violation
+          description: Tight coupling, hardcoded dependencies.
+          enabled: true
+          category: form
+        - symbol: '#'
+          name: Cohesion / SOLID Issue
+          description: Low cohesion, single responsibility violations.
+          enabled: true
+          category: form
+        - symbol: =
+          name: DRY Violation
+          description: Code duplication, repeated logic.
+          enabled: true
+          category: form
+        - symbol: '?'
+          name: KISS Violation
+          description: Overly clever, deeply nested, hard to read code.
+          enabled: true
+          category: form
+output:
+    dir: ""
+    format: text
