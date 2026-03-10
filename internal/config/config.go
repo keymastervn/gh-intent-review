@@ -33,10 +33,11 @@ type LLMConfig struct {
 
 // ReviewConfig controls the review process.
 type ReviewConfig struct {
-	Parallel     int      `yaml:"parallel"`
-	IgnoreFiles  []string `yaml:"ignore_files,omitempty"`  // glob patterns
-	FocusFiles   []string `yaml:"focus_files,omitempty"`   // glob patterns
-	CustomPrompt string   `yaml:"custom_prompt,omitempty"` // appended to the system prompt
+	Parallel      int      `yaml:"parallel"`
+	IgnoreFiles   []string `yaml:"ignore_files,omitempty"`    // glob patterns
+	FocusFiles    []string `yaml:"focus_files,omitempty"`     // glob patterns
+	CustomPrompt  string   `yaml:"custom_prompt,omitempty"`   // appended to the system prompt
+	CheckAndFetch bool     `yaml:"check_and_fetch,omitempty"` // auto-regenerate if PR head changed
 }
 
 // IntentSymbol defines a single intent notation.

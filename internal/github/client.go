@@ -66,6 +66,23 @@ func (c *Client) GetPRDiff(pr *PullRequest) (string, error) {
 	return string(out), nil
 }
 
+// GetPRHeadSHA fetches the head commit SHA for a pull request.
+func (c *Client) GetPRHeadSHA(pr *PullRequest) (string, error) {
+	var response struct {
+		Head struct {
+			SHA string `json:"sha"`
+		} `json:"head"`
+	}
+	err := c.rest.Get(
+		fmt.Sprintf("repos/%s/%s/pulls/%d", pr.Owner, pr.Repo, pr.Number),
+		&response,
+	)
+	if err != nil {
+		return "", err
+	}
+	return response.Head.SHA, nil
+}
+
 // PRInfo holds metadata about a pull request.
 type PRInfo struct {
 	Title string `json:"title"`

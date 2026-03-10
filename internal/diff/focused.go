@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // FocusedDiff is the top-level container for an intentional diff.
@@ -102,6 +103,14 @@ func (fd *FocusedDiff) TotalIntents() int {
 	return total
 }
 
+// ShortSHA returns the first 7 characters of a git SHA.
+func ShortSHA(sha string) string {
+	if len(sha) >= 7 {
+		return sha[:7]
+	}
+	return sha
+}
+
 // DefaultOutputPath returns the default storage path for an intentional diff.
 // Without a config, diffs are stored at ~/.gh-intent-review/owner/repo/<pr>.intentional.diff
 func DefaultOutputPath(owner, repo string, number int) string {
@@ -115,6 +124,67 @@ func DefaultOutputPath(owner, repo string, number int) string {
 // ProjectOutputPath returns a project-local storage path (used when output.dir is configured).
 func ProjectOutputPath(dir, owner, repo string, number int) string {
 	return filepath.Join(dir, owner, repo, fmt.Sprintf("%d.intentional.diff", number))
+}
+
+// DefaultOutputPathWithSHA returns the default storage path including the head commit SHA.
+// Diffs are stored at ~/.gh-intent-review/owner/repo/<pr>-<short-sha>.intentional.diff
+func DefaultOutputPathWithSHA(owner, repo string, number int, sha string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "."
+	}
+	return filepath.Join(home, ".gh-intent-review", owner, repo, fmt.Sprintf("%d-%s.intentional.diff", number, ShortSHA(sha)))
+}
+
+// ProjectOutputPathWithSHA returns a project-local storage path including the head commit SHA.
+func ProjectOutputPathWithSHA(dir, owner, repo string, number int, sha string) string {
+	return filepath.Join(dir, owner, repo, fmt.Sprintf("%d-%s.intentional.diff", number, ShortSHA(sha)))
+}
+
+// FindDiffPath locates an existing intentional diff for the given PR.
+// outputDir is the configured output.dir value (empty = use ~/.gh-intent-review).
+// If sha is non-empty, looks for an exact SHA-matched file (e.g. 1-cb3513f.intentional.diff).
+// If sha is empty, returns the most recently modified file matching <number>-*.intentional.diff.
+// Returns ("", false) if no matching file is found.
+func FindDiffPath(outputDir, owner, repo string, number int, sha string) (string, bool) {
+	var dir string
+	if outputDir != "" {
+		dir = filepath.Join(outputDir, owner, repo)
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", false
+		}
+		dir = filepath.Join(home, ".gh-intent-review", owner, repo)
+	}
+
+	if sha != "" {
+		path := filepath.Join(dir, fmt.Sprintf("%d-%s.intentional.diff", number, ShortSHA(sha)))
+		if _, err := os.Stat(path); err == nil {
+			return path, true
+		}
+		return "", false
+	}
+
+	// No SHA provided: return the most recently modified matching file.
+	pattern := filepath.Join(dir, fmt.Sprintf("%d-*.intentional.diff", number))
+	matches, err := filepath.Glob(pattern)
+	if err != nil || len(matches) == 0 {
+		return "", false
+	}
+	var best string
+	var bestTime time.Time
+	for _, m := range matches {
+		info, err := os.Stat(m)
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(bestTime) {
+			bestTime = info.ModTime()
+			best = m
+		}
+	}
+	return best, best != ""
 }
 
 // WriteFocusedDiff writes an intentional diff to disk.
