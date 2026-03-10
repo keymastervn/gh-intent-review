@@ -14,6 +14,7 @@ import (
 )
 
 var reviewConfig string
+var reviewForceFetch bool
 
 var reviewCmd = &cobra.Command{
 	Use:   "review <pr-url>",
@@ -40,7 +41,7 @@ focused diff. For each intent, you can:
 		}
 
 		// Resolve which diff file to use, checking against the current PR head SHA.
-		diffPath := resolveDiffPath(loaded.Config, pr, prURL)
+		diffPath := resolveDiffPath(loaded.Config, pr, prURL, reviewForceFetch)
 
 		focusedDiff, err := diff.ReadFocusedDiff(diffPath)
 		if err != nil {
@@ -78,6 +79,7 @@ focused diff. For each intent, you can:
 
 func init() {
 	reviewCmd.Flags().StringVarP(&reviewConfig, "config", "c", "", "Path to config file (default: .gh-intent-review.yml in CWD or home dir)")
+	reviewCmd.Flags().BoolVar(&reviewForceFetch, "force-fetch", false, "Always regenerate the intentional diff before reviewing")
 }
 
 // approvePR runs `gh pr review --approve` with the given review body.
@@ -91,18 +93,36 @@ func approvePR(prURL, body string) error {
 // resolveDiffPath determines which intentional diff file to use for the review session.
 //
 // Resolution order:
+//  0. If forceFetch is true: always regenerate and return the new file.
 //  1. Fetch the current PR head SHA and look for an exact-match file (<pr>-<sha>.intentional.diff).
 //  2. If not found and check_and_fetch is true: auto-generate a new intentional diff.
 //  3. If not found and check_and_fetch is false: fall back to any existing <pr>-*.intentional.diff
 //     (most recently modified) with a staleness warning.
 //  4. Final fallback to the legacy path <pr>.intentional.diff for backward compatibility.
-func resolveDiffPath(cfg *config.Config, pr *github.PullRequest, prURL string) string {
+func resolveDiffPath(cfg *config.Config, pr *github.PullRequest, prURL string, forceFetch bool) string {
 	outputDir := cfg.Output.Dir
 
 	client, clientErr := github.NewClient()
 	if clientErr == nil {
 		headSHA, shaErr := client.GetPRHeadSHA(pr)
 		if shaErr == nil {
+			var genPath string
+			if outputDir != "" {
+				genPath = diff.ProjectOutputPathWithSHA(outputDir, pr.Owner, pr.Repo, pr.Number, headSHA)
+			} else {
+				genPath = diff.DefaultOutputPathWithSHA(pr.Owner, pr.Repo, pr.Number, headSHA)
+			}
+
+			// 0. force-fetch: always regenerate
+			if forceFetch {
+				fmt.Fprintf(os.Stderr, "Force-fetching diff for head %s...\n", diff.ShortSHA(headSHA))
+				if err := generateIntentDiff(cfg, client, pr, genPath, prURL); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: force-fetch failed: %v\n", err)
+				} else {
+					return genPath
+				}
+			}
+
 			// 1. Exact SHA match
 			if path, found := diff.FindDiffPath(outputDir, pr.Owner, pr.Repo, pr.Number, headSHA); found {
 				return path
@@ -110,12 +130,6 @@ func resolveDiffPath(cfg *config.Config, pr *github.PullRequest, prURL string) s
 
 			// 2. check_and_fetch: auto-generate
 			if cfg.Review.CheckAndFetch {
-				var genPath string
-				if outputDir != "" {
-					genPath = diff.ProjectOutputPathWithSHA(outputDir, pr.Owner, pr.Repo, pr.Number, headSHA)
-				} else {
-					genPath = diff.DefaultOutputPathWithSHA(pr.Owner, pr.Repo, pr.Number, headSHA)
-				}
 				fmt.Fprintf(os.Stderr, "No diff found for current head %s — generating...\n", diff.ShortSHA(headSHA))
 				if err := generateIntentDiff(cfg, client, pr, genPath, prURL); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: auto-generate failed: %v\n", err)
