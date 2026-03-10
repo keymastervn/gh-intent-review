@@ -7,17 +7,12 @@ import (
 )
 
 // NewProvider creates an LLMProvider based on the config.
+// Only the "agent" provider is supported.
 func NewProvider(cfg *config.Config) (LLMProvider, error) {
 	switch cfg.LLM.Provider {
-	case "anthropic":
-		return NewAnthropicProvider(cfg.LLM)
-	case "openai":
-		return NewOpenAIProvider(cfg.LLM)
-	case "ollama":
-		return NewOllamaProvider(cfg.LLM)
-	case "agent":
+	case "agent", "":
 		return NewAgentProvider(cfg.LLM)
 	default:
-		return nil, fmt.Errorf("unsupported LLM provider: %s (supported: anthropic, openai, ollama, agent)", cfg.LLM.Provider)
+		return nil, fmt.Errorf("unsupported LLM provider: %q (only \"agent\" is supported)", cfg.LLM.Provider)
 	}
 }

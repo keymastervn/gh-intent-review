@@ -14,12 +14,8 @@ import (
 // AgentProvider implements LLMProvider by invoking a locally installed CLI agent
 // (e.g. Claude Code: `claude -p <prompt> --output-format json`).
 //
-// Unlike API-based providers that see only the diff text, the agent has access to
-// the full codebase at $PWD via its own tools (file reads, search, etc.), enabling
-// deeper cross-file analysis.
-//
-// --append-system-prompt is auto-generated from the enabled intent symbols in config.
-// The user prompt includes the diff and instructs the agent to use $PWD for context.
+// All file diffs are passed in a single agent session, allowing cross-file analysis.
+// The agent has access to the full codebase at $PWD via its own tools.
 type AgentProvider struct {
 	command string
 	model   string
@@ -40,10 +36,9 @@ func NewAgentProvider(cfg config.LLMConfig) (*AgentProvider, error) {
 	}, nil
 }
 
-// ReviewFile runs the agent CLI to review a file diff and returns structured intents.
-// The agent can traverse the workspace at $PWD for additional context.
-func (p *AgentProvider) ReviewFile(fileDiff *diff.FileDiff, symbols []config.IntentSymbol) ([]diff.Intent, error) {
-	prompt := buildAgentPrompt(fileDiff, symbols)
+// ReviewAll runs the agent CLI to review all file diffs in a single session.
+func (p *AgentProvider) ReviewAll(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol) ([]diff.Intent, error) {
+	prompt := buildAgentPrompt(fileDiffs, symbols)
 	systemPrompt := buildAgentSystemPrompt(symbols)
 
 	args := []string{"-p", prompt, "--output-format", "json", "--append-system-prompt", systemPrompt}
@@ -68,17 +63,17 @@ func (p *AgentProvider) ReviewFile(fileDiff *diff.FileDiff, symbols []config.Int
 	}
 	if err := json.Unmarshal(out, &envelope); err != nil {
 		// Not wrapped — treat raw output as the intent JSON directly.
-		return parseLLMResponse(string(out), fileDiff, symbols)
+		return parseLLMResponse(string(out), fileDiffs, symbols)
 	}
 	if envelope.IsError {
 		return nil, fmt.Errorf("agent returned error: %s", envelope.Result)
 	}
 
-	return parseLLMResponse(envelope.Result, fileDiff, symbols)
+	return parseLLMResponse(envelope.Result, fileDiffs, symbols)
 }
 
-// buildAgentSystemPrompt constructs the --append-system-prompt content from the
-// enabled intent symbols. This tells the agent what categories of issues to look for.
+// buildAgentSystemPrompt constructs the --append-system-prompt content describing
+// what intent categories to look for and the expected JSON output schema.
 func buildAgentSystemPrompt(symbols []config.IntentSymbol) string {
 	var b strings.Builder
 
@@ -90,13 +85,15 @@ func buildAgentSystemPrompt(symbols []config.IntentSymbol) string {
 	}
 	b.WriteString(`
 Output ONLY a JSON array. Each element:
-  {"symbol": "!", "lines": ["exact code line"], "start_line": 12, "comment": "concise explanation"}
+  {"symbol": "!", "file": "path/to/file.ext", "lines": ["exact code line"], "start_line": 12, "comment": "concise explanation"}
 
 Rules:
 - symbol must be one of the listed intent symbols
+- file must be the exact file path as provided in the diff header
 - lines contains exact code lines being flagged (no +/- prefix)
 - An intent may span multiple consecutive lines
 - Multiple intents may reference the same line
+- Backslashes in code lines must be JSON-escaped: \s → \\s, \. → \\., \n → \\n, etc.
 - If no issues found, return: []
 - No markdown, no prose — raw JSON only
 `)
@@ -104,9 +101,8 @@ Rules:
 	return b.String()
 }
 
-// buildAgentPrompt builds the user-facing prompt for the agent, including the diff
-// and an instruction to use the workspace at $PWD for deeper context.
-func buildAgentPrompt(fileDiff *diff.FileDiff, symbols []config.IntentSymbol) string {
+// buildAgentPrompt builds the prompt for the agent with all file diffs concatenated.
+func buildAgentPrompt(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol) string {
 	var b strings.Builder
 
 	cwd, err := os.Getwd()
@@ -114,14 +110,16 @@ func buildAgentPrompt(fileDiff *diff.FileDiff, symbols []config.IntentSymbol) st
 		cwd = "$PWD"
 	}
 
-	b.WriteString(fmt.Sprintf("Review the following diff for `%s`.\n\n", fileDiff.NewName))
+	b.WriteString(fmt.Sprintf("Review the following PR diff (%d file(s)).\n\n", len(fileDiffs)))
 	b.WriteString(fmt.Sprintf(
 		"The full codebase is available at `%s` — use your tools to read related files, "+
 			"trace call sites, or search for patterns when assessing impact.\n\n",
 		cwd,
 	))
 	b.WriteString("Diff:\n```diff\n")
-	b.WriteString(fileDiff.String())
+	for _, fd := range fileDiffs {
+		b.WriteString(fd.String())
+	}
 	b.WriteString("```\n\n")
 	b.WriteString("Return a JSON array of intents found (see system prompt for schema). ")
 	b.WriteString("Return [] if no issues are found.")

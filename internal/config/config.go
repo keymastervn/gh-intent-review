@@ -20,20 +20,15 @@ type Config struct {
 	Output  OutputConfig  `yaml:"output"`
 }
 
-// LLMConfig configures the AI provider used for review.
+// LLMConfig configures the AI agent used for review.
 type LLMConfig struct {
-	Provider string `yaml:"provider"` // "anthropic", "openai", "ollama", "agent"
-	Model    string `yaml:"model"`
-	APIKey   string `yaml:"api_key,omitempty"` // can also use env vars
-	BaseURL  string `yaml:"base_url,omitempty"`
-
-	// Agent provider settings (provider: agent)
+	Provider     string `yaml:"provider"`                // only "agent" is supported
+	Model        string `yaml:"model,omitempty"`         // passed to the agent via --model
 	AgentCommand string `yaml:"agent_command,omitempty"` // CLI binary to invoke (default: "claude")
 }
 
 // ReviewConfig controls the review process.
 type ReviewConfig struct {
-	Parallel      int      `yaml:"parallel"`
 	IgnoreFiles   []string `yaml:"ignore_files,omitempty"`    // glob patterns
 	FocusFiles    []string `yaml:"focus_files,omitempty"`     // glob patterns
 	CustomPrompt  string   `yaml:"custom_prompt,omitempty"`   // appended to the system prompt
@@ -64,11 +59,9 @@ type OutputConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		LLM: LLMConfig{
-			Provider: "anthropic",
-			Model:    "claude-sonnet-4-6",
+			Provider: "agent",
 		},
 		Review: ReviewConfig{
-			Parallel: 4,
 			IgnoreFiles: []string{
 				"*.lock",
 				"*.sum",
@@ -147,14 +140,6 @@ func Load(explicitPath string) (*LoadResult, error) {
 		}
 		result.ConfigPath = p
 		break
-	}
-
-	// Env var overrides for API key
-	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" && cfg.LLM.APIKey == "" {
-		cfg.LLM.APIKey = key
-	}
-	if key := os.Getenv("OPENAI_API_KEY"); key != "" && cfg.LLM.Provider == "openai" && cfg.LLM.APIKey == "" {
-		cfg.LLM.APIKey = key
 	}
 
 	return result, nil

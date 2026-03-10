@@ -4,22 +4,21 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/keymastervn/gh-intent-review/internal/config"
 	"github.com/keymastervn/gh-intent-review/internal/diff"
 )
 
-// Engine orchestrates parallel agentic reviews of file diffs.
+// Engine orchestrates agentic review of all file diffs in a single session.
 type Engine struct {
 	cfg      *config.Config
 	provider LLMProvider
 }
 
-// LLMProvider is the interface that any AI backend must implement.
+// LLMProvider is the interface any AI backend must implement.
 type LLMProvider interface {
-	// ReviewFile takes a file diff and enabled symbols, returns intents found.
-	ReviewFile(fileDiff *diff.FileDiff, symbols []config.IntentSymbol) ([]diff.Intent, error)
+	// ReviewAll reviews all file diffs in one agent session and returns all intents found.
+	ReviewAll(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol) ([]diff.Intent, error)
 }
 
 // NewEngine creates a new review engine with the configured LLM provider.
@@ -31,75 +30,47 @@ func NewEngine(cfg *config.Config) (*Engine, error) {
 	return &Engine{cfg: cfg, provider: provider}, nil
 }
 
-// Review runs parallel reviews across all file diffs and returns a FocusedDiff.
+// Review runs a single-session review across all file diffs and returns a FocusedDiff.
 func (e *Engine) Review(fileDiffs []diff.FileDiff) (*diff.FocusedDiff, error) {
 	symbols := e.cfg.EnabledSymbols()
-	parallel := e.cfg.Review.Parallel
-	if parallel <= 0 {
-		parallel = 1
-	}
 
-	// Build the raw diff from all file diffs
+	// Build raw diff string from all files.
 	var rawDiffBuilder strings.Builder
 	for _, fd := range fileDiffs {
 		rawDiffBuilder.WriteString(fd.String())
 	}
 
-	type result struct {
-		intents []diff.Intent
-		err     error
-	}
-
-	results := make([]result, len(fileDiffs))
-	sem := make(chan struct{}, parallel)
-	var wg sync.WaitGroup
-
-	for i, fd := range fileDiffs {
-		if fd.IsBinary || e.shouldIgnore(fd.NewName) {
-			continue
+	// Filter binary and ignored files.
+	var filtered []diff.FileDiff
+	for _, fd := range fileDiffs {
+		if !fd.IsBinary && !e.shouldIgnore(fd.NewName) {
+			filtered = append(filtered, fd)
 		}
-
-		wg.Add(1)
-		go func(idx int, fileDiff diff.FileDiff) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			fmt.Printf("  Reviewing: %s\n", fileDiff.NewName)
-
-			intents, err := e.provider.ReviewFile(&fileDiff, symbols)
-			results[idx] = result{intents: intents, err: err}
-		}(i, fd)
+	}
+	if len(filtered) == 0 {
+		return &diff.FocusedDiff{RawDiff: rawDiffBuilder.String()}, nil
 	}
 
-	wg.Wait()
+	fmt.Printf("Reviewing %d file(s) in a single agent session:\n", len(filtered))
+	for _, fd := range filtered {
+		fmt.Printf("  %s\n", fd.NewName)
+	}
 
-	// Group intents by file
+	intents, err := e.provider.ReviewAll(filtered, symbols)
+	if err != nil {
+		return nil, fmt.Errorf("agent review failed: %w", err)
+	}
+
+	// Group intents by file, preserving order.
 	fileIntents := make(map[string]*diff.FocusedFile)
 	var fileOrder []string
-	var errCount int
-
-	for i, r := range results {
-		if r.err != nil {
-			fmt.Printf("  Warning: %s\n", r.err)
-			errCount++
-			continue
+	for _, intent := range intents {
+		path := intent.FilePath
+		if _, ok := fileIntents[path]; !ok {
+			fileIntents[path] = &diff.FocusedFile{Path: path}
+			fileOrder = append(fileOrder, path)
 		}
-		for _, intent := range r.intents {
-			path := intent.FilePath
-			if path == "" {
-				path = fileDiffs[i].NewName
-			}
-			if _, ok := fileIntents[path]; !ok {
-				fileIntents[path] = &diff.FocusedFile{Path: path}
-				fileOrder = append(fileOrder, path)
-			}
-			fileIntents[path].Intents = append(fileIntents[path].Intents, intent)
-		}
-	}
-
-	if errCount > 0 {
-		fmt.Printf("Warning: %d file(s) had review errors\n", errCount)
+		fileIntents[path].Intents = append(fileIntents[path].Intents, intent)
 	}
 
 	var files []diff.FocusedFile
@@ -107,12 +78,10 @@ func (e *Engine) Review(fileDiffs []diff.FileDiff) (*diff.FocusedDiff, error) {
 		files = append(files, *fileIntents[path])
 	}
 
-	focused := &diff.FocusedDiff{
+	return &diff.FocusedDiff{
 		RawDiff: rawDiffBuilder.String(),
 		Files:   files,
-	}
-
-	return focused, nil
+	}, nil
 }
 
 // shouldIgnore checks if a file matches any ignore patterns.

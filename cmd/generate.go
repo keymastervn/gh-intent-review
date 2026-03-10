@@ -12,11 +12,9 @@ import (
 )
 
 var (
-	generateModel    string
-	generateProvider string
-	generateOutput   string
-	generateParallel int
-	generateConfig   string
+	generateModel  string
+	generateOutput string
+	generateConfig string
 )
 
 var generateCmd = &cobra.Command{
@@ -46,15 +44,9 @@ Or at a custom dir if output.dir is set in .gh-intent-review.yml.`,
 			fmt.Fprintf(os.Stderr, "Tip: run from a directory containing .gh-intent-review.yml, or pass --config <path>\n")
 		}
 
-		// CLI flags override config
+		// CLI flag overrides config
 		if generateModel != "" {
 			cfg.LLM.Model = generateModel
-		}
-		if generateProvider != "" {
-			cfg.LLM.Provider = generateProvider
-		}
-		if generateParallel > 0 {
-			cfg.Review.Parallel = generateParallel
 		}
 
 		// Parse PR URL
@@ -111,8 +103,7 @@ func generateIntentDiff(cfg *config.Config, client *github.Client, pr *github.Pu
 		return fmt.Errorf("parsing diff: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Reviewing %d files with %d parallel workers (provider: %s)...\n",
-		len(fileDiffs), cfg.Review.Parallel, cfg.LLM.Provider)
+	fmt.Fprintf(os.Stderr, "Running agent review on %d file(s)...\n", len(fileDiffs))
 
 	engine, err := reviewer.NewEngine(cfg)
 	if err != nil {
@@ -133,9 +124,7 @@ func generateIntentDiff(cfg *config.Config, client *github.Client, pr *github.Pu
 }
 
 func init() {
-	generateCmd.Flags().StringVar(&generateModel, "model", "", "LLM model to use (overrides config)")
-	generateCmd.Flags().StringVar(&generateProvider, "provider", "", "LLM provider (overrides config)")
-	generateCmd.Flags().StringVarP(&generateOutput, "output", "o", "", "Output path (default: ~/.gh-intent-review/<owner>/<repo>/<pr>.intentional.diff)")
-	generateCmd.Flags().IntVarP(&generateParallel, "parallel", "p", 0, "Number of parallel review workers (overrides config)")
+	generateCmd.Flags().StringVar(&generateModel, "model", "", "Agent model to use (overrides config, passed via --model to agent)")
+	generateCmd.Flags().StringVarP(&generateOutput, "output", "o", "", "Output path (default: ~/.gh-intent-review/<owner>/<repo>/<pr>-<sha>.intentional.diff)")
 	generateCmd.Flags().StringVarP(&generateConfig, "config", "c", "", "Path to config file (default: .gh-intent-review.yml in CWD or home dir)")
 }
