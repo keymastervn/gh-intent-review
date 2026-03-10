@@ -18,8 +18,9 @@ type Engine struct {
 // LLMProvider is the interface any AI backend must implement.
 type LLMProvider interface {
 	// ReviewAll reviews all file diffs in one agent session and returns all intents found.
+	// prURL is the full GitHub PR URL (e.g. https://github.com/owner/repo/pull/123).
 	// severity is the minimum impact threshold ("" or "none" = report everything).
-	ReviewAll(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol, severity string) ([]diff.Intent, error)
+	ReviewAll(fileDiffs []diff.FileDiff, symbols []config.IntentSymbol, severity, prURL string) ([]diff.Intent, error)
 }
 
 // NewEngine creates a new review engine with the configured LLM provider.
@@ -32,7 +33,8 @@ func NewEngine(cfg *config.Config) (*Engine, error) {
 }
 
 // Review runs a single-session review across all file diffs and returns a FocusedDiff.
-func (e *Engine) Review(fileDiffs []diff.FileDiff) (*diff.FocusedDiff, error) {
+// prURL is the full GitHub PR URL passed to the agent for codebase context.
+func (e *Engine) Review(fileDiffs []diff.FileDiff, prURL string) (*diff.FocusedDiff, error) {
 	symbols := e.cfg.EnabledSymbols()
 
 	// Build raw diff string from all files.
@@ -57,7 +59,7 @@ func (e *Engine) Review(fileDiffs []diff.FileDiff) (*diff.FocusedDiff, error) {
 		fmt.Printf("  %s\n", fd.NewName)
 	}
 
-	intents, err := e.provider.ReviewAll(filtered, symbols, e.cfg.Intents.Severity)
+	intents, err := e.provider.ReviewAll(filtered, symbols, e.cfg.Intents.Severity, prURL)
 	if err != nil {
 		return nil, fmt.Errorf("agent review failed: %w", err)
 	}

@@ -38,7 +38,7 @@ focused diff. For each intent, you can:
 		}
 
 		// Resolve which diff file to use, checking against the current PR head SHA.
-		diffPath := resolveDiffPath(loaded.Config, pr)
+		diffPath := resolveDiffPath(loaded.Config, pr, prURL)
 
 		focusedDiff, err := diff.ReadFocusedDiff(diffPath)
 		if err != nil {
@@ -71,7 +71,7 @@ func init() {
 //  3. If not found and check_and_fetch is false: fall back to any existing <pr>-*.intentional.diff
 //     (most recently modified) with a staleness warning.
 //  4. Final fallback to the legacy path <pr>.intentional.diff for backward compatibility.
-func resolveDiffPath(cfg *config.Config, pr *github.PullRequest) string {
+func resolveDiffPath(cfg *config.Config, pr *github.PullRequest, prURL string) string {
 	outputDir := cfg.Output.Dir
 
 	client, clientErr := github.NewClient()
@@ -92,7 +92,7 @@ func resolveDiffPath(cfg *config.Config, pr *github.PullRequest) string {
 					genPath = diff.DefaultOutputPathWithSHA(pr.Owner, pr.Repo, pr.Number, headSHA)
 				}
 				fmt.Fprintf(os.Stderr, "No diff found for current head %s — generating...\n", diff.ShortSHA(headSHA))
-				if err := generateIntentDiff(cfg, client, pr, genPath); err != nil {
+				if err := generateIntentDiff(cfg, client, pr, genPath, prURL); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: auto-generate failed: %v\n", err)
 				} else {
 					return genPath

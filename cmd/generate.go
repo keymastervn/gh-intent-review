@@ -79,7 +79,7 @@ Or at a custom dir if output.dir is set in .gh-intent-review.yml.`,
 			}
 		}
 
-		if err := generateIntentDiff(cfg, client, pr, outputPath); err != nil {
+		if err := generateIntentDiff(cfg, client, pr, outputPath, prURL); err != nil {
 			return err
 		}
 
@@ -92,7 +92,8 @@ Or at a custom dir if output.dir is set in .gh-intent-review.yml.`,
 
 // generateIntentDiff fetches the PR diff, runs the agentic review, and writes the intentional diff.
 // It is shared between the generate command and the review command's check_and_fetch auto-regeneration.
-func generateIntentDiff(cfg *config.Config, client *github.Client, pr *github.PullRequest, outputPath string) error {
+// prURL is the original GitHub PR URL passed to the agent for codebase context.
+func generateIntentDiff(cfg *config.Config, client *github.Client, pr *github.PullRequest, outputPath, prURL string) error {
 	rawDiff, err := client.GetPRDiff(pr)
 	if err != nil {
 		return fmt.Errorf("fetching PR diff: %w", err)
@@ -110,7 +111,7 @@ func generateIntentDiff(cfg *config.Config, client *github.Client, pr *github.Pu
 		return fmt.Errorf("creating review engine: %w", err)
 	}
 
-	focusedDiff, err := engine.Review(fileDiffs)
+	focusedDiff, err := engine.Review(fileDiffs, prURL)
 	if err != nil {
 		return fmt.Errorf("running review: %w", err)
 	}
