@@ -93,29 +93,29 @@ func (s *ReviewSession) Run() (*ReviewResult, error) {
 					if prompt == "" {
 						prompt = "elaborate this issue"
 					}
-					fmt.Println("  Thinking...")
-					explanation, err := ElaborateIntent(s.cfg, intent, prompt)
-					if err != nil {
-						fmt.Printf("  Error: %v\n\n", err)
+
+					// Show command being invoked as dim/darkened text
+					fmt.Printf("  \033[2m$ %s\033[0m\n", ElaborateVerboseHint(s.cfg, prompt))
+
+					stop := Spinner("Thinking...")
+					explanation, elaborateErr := ElaborateIntent(s.cfg, intent, prompt)
+					stop()
+
+					if elaborateErr != nil {
+						fmt.Printf("  Error: %v\n\n", elaborateErr)
 					} else {
 						fmt.Printf("\n  ─── Elaboration ───\n%s\n  ───────────────────\n\n", indentText(explanation, "  "))
 					}
-					// Stay in the loop — user can elaborate again or take action
+					// Stay in loop — user can elaborate again or choose another action
 
 				case 'c':
-					defaultBody := buildDefaultComment(file.Path, intent)
-					fmt.Printf("\n  Suggested comment:\n  ┄\n")
-					for _, line := range strings.Split(defaultBody, "\n") {
-						fmt.Printf("  %s\n", line)
-					}
-					fmt.Printf("  ┄\n\n")
-					fmt.Print("  Edit or press Enter to post as-is: ")
-					userBody, err := s.readLine()
-					if err != nil {
-						return result, err
-					}
-					if userBody == "" {
-						userBody = defaultBody
+					suggestion := buildDefaultComment(file.Path, intent)
+					fmt.Printf("\n  \033[2mWrite a comment (↑ to load AI suggestion):\033[0m\n")
+					editor := NewCommentEditor(suggestion)
+					userBody, ok := editor.Run()
+					if !ok || strings.TrimSpace(userBody) == "" {
+						fmt.Println("  Comment cancelled.")
+						break
 					}
 					if err := postPRComment(s.pr, userBody); err != nil {
 						fmt.Printf("  Error posting comment: %v\n\n", err)

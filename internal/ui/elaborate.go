@@ -13,6 +13,45 @@ import (
 	"github.com/keymastervn/gh-intent-review/internal/diff"
 )
 
+// ElaborateVerboseHint returns a dim command-line description of what ElaborateIntent will call.
+// Printed before the spinner so the user knows what's running.
+func ElaborateVerboseHint(cfg *config.Config, userPrompt string) string {
+	truncated := userPrompt
+	if len(truncated) > 60 {
+		truncated = truncated[:57] + "..."
+	}
+	switch cfg.LLM.Provider {
+	case "agent":
+		cmd := cfg.LLM.AgentCommand
+		if cmd == "" {
+			cmd = "claude"
+		}
+		model := ""
+		if cfg.LLM.Model != "" {
+			model = " --model " + cfg.LLM.Model
+		}
+		return fmt.Sprintf("%s -p %q --output-format json%s", cmd, truncated, model)
+	case "anthropic":
+		model := cfg.LLM.Model
+		if model == "" {
+			model = "claude-sonnet-4-6"
+		}
+		return fmt.Sprintf("POST api.anthropic.com/v1/messages  model=%s", model)
+	case "openai":
+		base := cfg.LLM.BaseURL
+		if base == "" {
+			base = "api.openai.com/v1"
+		}
+		model := cfg.LLM.Model
+		if model == "" {
+			model = "gpt-4o"
+		}
+		return fmt.Sprintf("POST %s/chat/completions  model=%s", base, model)
+	default:
+		return fmt.Sprintf("provider: %s", cfg.LLM.Provider)
+	}
+}
+
 // ElaborateIntent calls the configured LLM/agent to provide a deeper explanation
 // of an intent issue, guided by the user's prompt.
 func ElaborateIntent(cfg *config.Config, intent diff.Intent, userPrompt string) (string, error) {
