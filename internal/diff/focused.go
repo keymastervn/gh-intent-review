@@ -66,6 +66,7 @@ type Intent struct {
 	Name          string   // e.g. "Security Risk"
 	FilePath      string   // b/file.txt
 	HunkHeader    string   // @@ +10,2 @@ (affected line range)
+	StartLine     int      // first affected line in the new file (for line-specific PR comments)
 	AffectedLines []string // the + lines (code being flagged)
 	ContextLines  []string // surrounding context (space-prefixed)
 	Explanation   string   // the intent comment text

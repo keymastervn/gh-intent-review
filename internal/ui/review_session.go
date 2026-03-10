@@ -117,7 +117,7 @@ func (s *ReviewSession) Run() (*ReviewResult, error) {
 						fmt.Println("  Comment cancelled.")
 						break
 					}
-					if err := postPRComment(s.pr, userBody); err != nil {
+					if err := s.postComment(intent, userBody); err != nil {
 						fmt.Printf("  Error posting comment: %v\n\n", err)
 					} else {
 						fmt.Println("  ✓ Comment posted")
@@ -198,9 +198,24 @@ func buildDefaultComment(filePath string, intent diff.Intent) string {
 	return b.String()
 }
 
-// postPRComment posts a general comment on the pull request via the gh CLI.
-func postPRComment(pr *github.PullRequest, body string) error {
-	prURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d", pr.Owner, pr.Repo, pr.Number)
+// postComment posts a line-specific review comment on the PR when line info is available,
+// falling back to a general PR comment if the intent has no start line.
+func (s *ReviewSession) postComment(intent diff.Intent, body string) error {
+	if intent.StartLine > 0 {
+		ghClient, err := github.NewClient()
+		if err != nil {
+			return fmt.Errorf("creating GitHub client: %w", err)
+		}
+		commitSHA, err := ghClient.GetPRHeadSHA(s.pr)
+		if err != nil {
+			return fmt.Errorf("fetching head SHA: %w", err)
+		}
+		// Diff file paths are "b/path/to/file" — strip the "b/" prefix.
+		path := strings.TrimPrefix(intent.FilePath, "b/")
+		return ghClient.PostPRLineComment(s.pr, commitSHA, path, intent.StartLine, body)
+	}
+	// Fallback: no line info — post as a general PR comment.
+	prURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d", s.pr.Owner, s.pr.Repo, s.pr.Number)
 	cmd := exec.Command("gh", "pr", "comment", prURL, "--body", body)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

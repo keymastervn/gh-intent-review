@@ -1,6 +1,8 @@
 package github
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -81,6 +83,39 @@ func (c *Client) GetPRHeadSHA(pr *PullRequest) (string, error) {
 		return "", err
 	}
 	return response.Head.SHA, nil
+}
+
+// PostPRLineComment posts a line-specific review comment on the pull request.
+// path must be the file path relative to the repo root (no "b/" prefix).
+// line is the line number in the new file (right side of the diff).
+// commitSHA must be the head commit SHA of the PR.
+func (c *Client) PostPRLineComment(pr *PullRequest, commitSHA, path string, line int, body string) error {
+	payload, err := json.Marshal(map[string]interface{}{
+		"body":      body,
+		"commit_id": commitSHA,
+		"path":      path,
+		"line":      line,
+		"side":      "RIGHT",
+	})
+	if err != nil {
+		return fmt.Errorf("encoding comment payload: %w", err)
+	}
+
+	cmd := exec.Command("gh", "api",
+		fmt.Sprintf("repos/%s/%s/pulls/%d/comments", pr.Owner, pr.Repo, pr.Number),
+		"--method", "POST",
+		"--input", "-",
+	)
+	cmd.Stdin = bytes.NewReader(payload)
+	if out, err := cmd.Output(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return fmt.Errorf("posting line comment: %s", string(exitErr.Stderr))
+		}
+		return fmt.Errorf("posting line comment: %w", err)
+	} else {
+		_ = out
+	}
+	return nil
 }
 
 // PRInfo holds metadata about a pull request.

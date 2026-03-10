@@ -66,6 +66,7 @@ func parseLLMResponse(response string, fileDiffs []diff.FileDiff, symbols []conf
 			Name:          diff.SymbolToName(r.Symbol),
 			FilePath:      filePath,
 			HunkHeader:    fmt.Sprintf("@@ +%d,%d @@", r.StartLine, lineCount),
+			StartLine:     r.StartLine,
 			AffectedLines: r.Lines,
 			Explanation:   r.Comment,
 			Severity:      diff.SymbolToSeverity(r.Symbol),

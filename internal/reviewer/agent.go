@@ -43,7 +43,7 @@ func (p *AgentProvider) ReviewAll(fileDiffs []diff.FileDiff, symbols []config.In
 	prompt := buildAgentPrompt(fileDiffs, symbols, prURL)
 	systemPrompt := buildAgentSystemPrompt(symbols, severity)
 
-	args := []string{"-p", prompt, "--output-format", "stream-json", "--append-system-prompt", systemPrompt}
+	args := []string{"-p", prompt, "--output-format", "stream-json", "--verbose", "--append-system-prompt", systemPrompt}
 	if p.model != "" {
 		args = append(args, "--model", p.model)
 	}
