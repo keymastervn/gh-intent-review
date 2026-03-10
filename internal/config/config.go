@@ -33,6 +33,7 @@ type ReviewConfig struct {
 	FocusFiles    []string `yaml:"focus_files,omitempty"`     // glob patterns
 	CustomPrompt  string   `yaml:"custom_prompt,omitempty"`   // appended to the system prompt
 	CheckAndFetch bool     `yaml:"check_and_fetch,omitempty"` // auto-regenerate if PR head changed
+	AutoApprove   bool     `yaml:"auto_approve,omitempty"`    // approve PR when no intents remain after review
 }
 
 // IntentSymbol defines a single intent notation.

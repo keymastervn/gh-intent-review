@@ -21,11 +21,7 @@ type llmIntent struct {
 // parseLLMResponse converts the agent's JSON response into diff.Intent blocks.
 // fileDiffs is used to validate file paths returned by the agent.
 func parseLLMResponse(response string, fileDiffs []diff.FileDiff, symbols []config.IntentSymbol) ([]diff.Intent, error) {
-	response = strings.TrimSpace(response)
-	response = strings.TrimPrefix(response, "```json")
-	response = strings.TrimPrefix(response, "```")
-	response = strings.TrimSuffix(response, "```")
-	response = strings.TrimSpace(response)
+	response = extractJSONArray(response)
 
 	// Agents sometimes output code containing regex/escape sequences like \s, \d, \w
 	// directly in JSON strings. These are invalid JSON escapes and must be fixed before parsing.
@@ -73,6 +69,38 @@ func parseLLMResponse(response string, fileDiffs []diff.FileDiff, symbols []conf
 		})
 	}
 	return intents, nil
+}
+
+// extractJSONArray pulls the JSON array out of the agent response, which may
+// include prose text or a fenced code block (```json ... ```) around the array.
+// It tries, in order:
+//  1. Content inside the first ```json … ``` or ``` … ``` fence.
+//  2. The substring from the first '[' to the last ']'.
+//  3. The trimmed response as-is.
+func extractJSONArray(response string) string {
+	s := strings.TrimSpace(response)
+
+	// 1. Strip fenced code block (```json or ```)
+	if idx := strings.Index(s, "```"); idx != -1 {
+		inner := s[idx+3:]
+		// Skip optional language tag (e.g. "json\n")
+		if nl := strings.IndexByte(inner, '\n'); nl != -1 {
+			inner = inner[nl+1:]
+		}
+		if end := strings.Index(inner, "```"); end != -1 {
+			inner = inner[:end]
+		}
+		s = strings.TrimSpace(inner)
+	}
+
+	// 2. Find the outermost [ … ] in case there is still surrounding prose.
+	start := strings.IndexByte(s, '[')
+	end := strings.LastIndexByte(s, ']')
+	if start != -1 && end > start {
+		return s[start : end+1]
+	}
+
+	return s
 }
 
 // sanitizeJSONEscapes fixes invalid escape sequences in JSON string values.

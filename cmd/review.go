@@ -3,11 +3,13 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/keymastervn/gh-intent-review/internal/config"
 	"github.com/keymastervn/gh-intent-review/internal/diff"
 	"github.com/keymastervn/gh-intent-review/internal/github"
 	"github.com/keymastervn/gh-intent-review/internal/ui"
+	"github.com/keymastervn/gh-intent-review/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -55,12 +57,35 @@ focused diff. For each intent, you can:
 		// Print summary
 		result.PrintSummary()
 
+		// Auto-approve if enabled and no intents were found, or every intent was skipped (none commented).
+		if loaded.Config.Review.AutoApprove && (result.Total == 0 || result.Skipped == result.Total) {
+			fmt.Fprintf(os.Stderr, "\nAuto-approving PR (no unresolved intents)...\n")
+			llm := loaded.Config.LLM
+			body := fmt.Sprintf(
+				"Intent-based agentic review accepted, auto-approved\n\n_v%s model:%s provider:%s_",
+				version.Current, llm.Model, llm.Provider,
+			)
+			if err := approvePR(prURL, body); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: auto-approve failed: %v\n", err)
+			} else {
+				fmt.Fprintf(os.Stderr, "✓ PR approved\n")
+			}
+		}
+
 		return nil
 	},
 }
 
 func init() {
 	reviewCmd.Flags().StringVarP(&reviewConfig, "config", "c", "", "Path to config file (default: .gh-intent-review.yml in CWD or home dir)")
+}
+
+// approvePR runs `gh pr review --approve` with the given review body.
+func approvePR(prURL, body string) error {
+	cmd := exec.Command("gh", "pr", "review", prURL, "--approve", "--body", body)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // resolveDiffPath determines which intentional diff file to use for the review session.

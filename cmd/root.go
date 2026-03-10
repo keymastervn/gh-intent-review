@@ -4,11 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/keymastervn/gh-intent-review/internal/version"
 	"github.com/spf13/cobra"
-)
-
-var (
-	version = "dev"
 )
 
 var rootCmd = &cobra.Command{
@@ -37,6 +34,6 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version of gh-intent-review",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintf(os.Stdout, "gh-intent-review %s\n", version)
+		fmt.Fprintf(os.Stdout, "gh-intent-review %s\n", version.Current)
 	},
 }
