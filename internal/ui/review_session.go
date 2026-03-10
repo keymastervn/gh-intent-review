@@ -2,9 +2,11 @@ package ui
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/keymastervn/gh-intent-review/internal/config"
@@ -75,7 +77,7 @@ func (s *ReviewSession) Run() (*ReviewResult, error) {
 
 			done := false
 			for !done {
-				fmt.Print("  [e]laborate  [c]omment  [s]kip  [q]uit → ")
+				fmt.Print("  [e]laborate  [c]omment  [o]pen  [s]kip  [q]uit → ")
 
 				key, err := s.readKey()
 				if err != nil {
@@ -131,6 +133,15 @@ func (s *ReviewSession) Run() (*ReviewResult, error) {
 						})
 						done = true
 					}
+
+				case 'o':
+					url := prDiffURL(s.pr, intent)
+					if err := openBrowser(url); err != nil {
+						fmt.Printf("  Error opening browser: %v\n  URL: %s\n\n", err, url)
+					} else {
+						fmt.Printf("  → Opened %s\n\n", url)
+					}
+					// Stay in loop — user can still comment or skip
 
 				case 's':
 					s.diff.Files[fi].Intents[ii].Status = diff.IntentSkipped
@@ -252,6 +263,29 @@ func renderIntentForReview(current, total int, intent diff.Intent) {
 	}
 
 	fmt.Printf("  %s\n\n", intent.Explanation)
+}
+
+// prDiffURL returns the GitHub PR Files tab URL anchored to the specific line of the intent.
+// GitHub anchors use #diff-{sha256(filepath)}R{line} for the right (new) side of the diff.
+func prDiffURL(pr *github.PullRequest, intent diff.Intent) string {
+	filePath := strings.TrimPrefix(intent.FilePath, "b/")
+	hash := sha256.Sum256([]byte(filePath))
+	anchor := fmt.Sprintf("diff-%xR%d", hash, intent.StartLine)
+	return fmt.Sprintf("https://github.com/%s/%s/pull/%d/files#%s", pr.Owner, pr.Repo, pr.Number, anchor)
+}
+
+// openBrowser opens the given URL in the default system browser.
+func openBrowser(url string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default: // linux, freebsd, etc.
+		cmd = exec.Command("xdg-open", url)
+	}
+	return cmd.Start()
 }
 
 // PrintSummary outputs the review session summary.

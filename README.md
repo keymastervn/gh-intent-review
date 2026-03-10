@@ -136,8 +136,8 @@ Create `.gh-intent-review.yml` in your project root (or home directory for globa
 ```yaml
 llm:
   provider: agent                  # only "agent" is supported
-  # model: claude-sonnet-4-6      # passed to the agent via --model (optional)
-  # agent_command: claude          # CLI binary in PATH (default: "claude")
+  model: claude-sonnet-4-6      # passed to the agent via --model (optional)
+  agent_command: claude          # CLI binary in PATH (default: "claude")
 
 review:
   ignore_files:                    # skip these files
@@ -150,6 +150,7 @@ review:
   #   - "lib/**"
   # custom_prompt: "Also check for Rails-specific security issues"
   # check_and_fetch: true          # auto-regenerate diff when the PR head changes
+  # auto_approve: false
 
 intents:
   # severity: minor                # global threshold: none (default), trivial, minor, major, critical
