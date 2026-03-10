@@ -1,10 +1,8 @@
 package reviewer
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -43,85 +41,35 @@ func (p *AgentProvider) ReviewAll(fileDiffs []diff.FileDiff, symbols []config.In
 	prompt := buildAgentPrompt(fileDiffs, symbols, prURL)
 	systemPrompt := buildAgentSystemPrompt(symbols, severity)
 
-	args := []string{"-p", prompt, "--output-format", "stream-json", "--verbose", "--append-system-prompt", systemPrompt}
+	args := []string{"-p", prompt, "--output-format", "json", "--append-system-prompt", systemPrompt}
 	if p.model != "" {
 		args = append(args, "--model", p.model)
 	}
 
 	cmd := exec.Command(p.command, args...)
-	// Pipe agent stderr (tool use, thinking) live to our stderr so the user sees progress.
-	cmd.Stderr = os.Stderr
-
-	stdout, err := cmd.StdoutPipe()
+	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("creating stdout pipe: %w", err)
-	}
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("starting agent command: %w", err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("agent command failed (exit %d): %s", exitErr.ExitCode(), string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("agent command failed: %w", err)
 	}
 
-	// stream-json emits one JSON object per line. The final result is the event with
-	// "type":"result". Collect it; forward all other lines to stderr as activity hints.
-	result, err := collectStreamResult(stdout)
-	if waitErr := cmd.Wait(); waitErr != nil {
-		if exitErr, ok := waitErr.(*exec.ExitError); ok {
-			return nil, fmt.Errorf("agent command failed (exit %d)", exitErr.ExitCode())
-		}
-		return nil, fmt.Errorf("agent command failed: %w", waitErr)
+	// Claude Code --output-format json wraps the model output in an envelope:
+	// {"type":"result","subtype":"success","is_error":false,"result":"...","session_id":"..."}
+	var envelope struct {
+		Result  string `json:"result"`
+		IsError bool   `json:"is_error"`
 	}
-	if err != nil {
-		return nil, err
+	if err := json.Unmarshal(out, &envelope); err != nil {
+		// Not wrapped — treat raw output as the intent JSON directly.
+		return parseLLMResponse(string(out), fileDiffs, symbols)
+	}
+	if envelope.IsError {
+		return nil, fmt.Errorf("agent returned error: %s", envelope.Result)
 	}
 
-	return parseLLMResponse(result, fileDiffs, symbols)
-}
-
-// collectStreamResult reads stream-json lines from the agent stdout.
-// Each line is a JSON event; the one with "type":"result" contains the final model output.
-// Non-result events are forwarded to stderr so the user sees live tool activity.
-func collectStreamResult(r io.Reader) (string, error) {
-	var resultText string
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1 MiB line buffer for large diffs
-	for scanner.Scan() {
-		line := scanner.Text()
-		var event struct {
-			Type    string `json:"type"`
-			Subtype string `json:"subtype"`
-			Result  string `json:"result"`
-			IsError bool   `json:"is_error"`
-			// assistant message fields
-			Message struct {
-				Content []struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
-				} `json:"content"`
-			} `json:"message"`
-		}
-		if err := json.Unmarshal([]byte(line), &event); err != nil {
-			// Not JSON (e.g. raw text fallback) — treat as result.
-			resultText = line
-			continue
-		}
-		switch event.Type {
-		case "result":
-			if event.IsError {
-				return "", fmt.Errorf("agent returned error: %s", event.Result)
-			}
-			resultText = event.Result
-		case "assistant":
-			// Forward text content chunks to stderr so the user sees the agent thinking.
-			for _, c := range event.Message.Content {
-				if c.Type == "text" && c.Text != "" {
-					fmt.Fprintf(os.Stderr, "%s", c.Text)
-				}
-			}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("reading agent output: %w", err)
-	}
-	return resultText, nil
+	return parseLLMResponse(envelope.Result, fileDiffs, symbols)
 }
 
 // severityLevel maps a severity name to a numeric rank for comparison.

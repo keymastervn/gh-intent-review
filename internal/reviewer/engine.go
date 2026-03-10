@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/keymastervn/gh-intent-review/internal/config"
 	"github.com/keymastervn/gh-intent-review/internal/diff"
@@ -59,7 +60,9 @@ func (e *Engine) Review(fileDiffs []diff.FileDiff, prURL string) (*diff.FocusedD
 		fmt.Printf("  %s\n", fd.NewName)
 	}
 
+	stopSpinner := spinner("Agent thinking...")
 	intents, err := e.provider.ReviewAll(filtered, symbols, e.cfg.Intents.Severity, prURL)
+	stopSpinner()
 	if err != nil {
 		return nil, fmt.Errorf("agent review failed: %w", err)
 	}
@@ -85,6 +88,33 @@ func (e *Engine) Review(fileDiffs []diff.FileDiff, prURL string) (*diff.FocusedD
 		RawDiff: rawDiffBuilder.String(),
 		Files:   files,
 	}, nil
+}
+
+// spinner displays an animated spinner with a message until the returned stop func is called.
+func spinner(message string) (stop func()) {
+	frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		i := 0
+		tick := time.NewTicker(80 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-done:
+				fmt.Print("\r\033[K")
+				return
+			case <-tick.C:
+				fmt.Printf("\r  \033[2m%s\033[0m  %s", frames[i%len(frames)], message)
+				i++
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-stopped
+	}
 }
 
 // shouldIgnore checks if a file matches any ignore patterns.
