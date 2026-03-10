@@ -135,9 +135,9 @@ Create `.gh-intent-review.yml` in your project root (or home directory for globa
 
 ```yaml
 llm:
-  provider: agent                  # only "agent" is supported
-  model: claude-sonnet-4-6      # passed to the agent via --model (optional)
-  agent_command: claude          # CLI binary in PATH (default: "claude")
+  provider: agent                  # "agent" (default) or "custom" (see Custom LLM Providers below)
+  model: claude-sonnet-4-6         # passed to the agent via --model (optional)
+  agent_command: claude            # CLI binary in PATH (default: "claude")
 
 review:
   ignore_files:                    # skip these files
@@ -208,6 +208,42 @@ output:
   dir: ""                            # empty = ~/.gh-intent-review/ (default)
   # dir: .gh-intent-review          # set to store diffs in the project directory instead
   format: text
+```
+
+### Custom LLM Providers
+
+Set `provider: custom` to route the Claude Code agent through an alternative backend — useful for OpenRouter, Ollama, or any OpenAI-compatible endpoint.
+
+The three fields `model`, `base_url`, and `api_key` are all required and validated at startup.
+
+**OpenRouter:**
+
+```yaml
+llm:
+  provider: custom
+  agent_command: claude
+  model: nvidia/nemotron-3-nano-30b-a3b:free  # any model slug from openrouter.ai/models
+  base_url: https://openrouter.ai/api
+  api_key: sk-or-v1-xxxxxxxxxxxxxxxxxxxx
+```
+
+**Ollama (local):**
+
+```yaml
+llm:
+  provider: custom
+  agent_command: claude
+  model: llama3
+  base_url: http://localhost:11434
+  api_key: ollama  # any non-empty string; Ollama ignores it
+```
+
+Under the hood, `provider: custom` injects these environment variables when invoking the agent command:
+
+```
+ANTHROPIC_BASE_URL=<base_url>
+ANTHROPIC_AUTH_TOKEN=<api_key>
+ANTHROPIC_API_KEY=            # explicitly empty (required by the Claude Code agent)
 ```
 
 ### Severity threshold

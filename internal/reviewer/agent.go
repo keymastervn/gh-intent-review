@@ -20,10 +20,37 @@ import (
 type AgentProvider struct {
 	command string
 	model   string
+	env     []string // extra env vars to inject (appended to os.Environ())
 }
 
 // NewAgentProvider creates a new agent-based provider.
 func NewAgentProvider(cfg config.LLMConfig) (*AgentProvider, error) {
+	return newAgentProvider(cfg, nil)
+}
+
+// NewCustomAgentProvider creates an agent provider with custom API credentials injected
+// as environment variables, enabling non-Anthropic backends (e.g. OpenRouter, Ollama).
+//
+// Required fields: Model, BaseURL, APIKey.
+func NewCustomAgentProvider(cfg config.LLMConfig) (*AgentProvider, error) {
+	if cfg.Model == "" {
+		return nil, fmt.Errorf("custom provider requires llm.model to be set")
+	}
+	if cfg.BaseURL == "" {
+		return nil, fmt.Errorf("custom provider requires llm.base_url to be set")
+	}
+	if cfg.APIKey == "" {
+		return nil, fmt.Errorf("custom provider requires llm.api_key to be set")
+	}
+	env := []string{
+		"ANTHROPIC_BASE_URL=" + cfg.BaseURL,
+		"ANTHROPIC_AUTH_TOKEN=" + cfg.APIKey,
+		"ANTHROPIC_API_KEY=", // must be explicitly empty
+	}
+	return newAgentProvider(cfg, env)
+}
+
+func newAgentProvider(cfg config.LLMConfig, env []string) (*AgentProvider, error) {
 	command := cfg.AgentCommand
 	if command == "" {
 		command = "claude"
@@ -34,6 +61,7 @@ func NewAgentProvider(cfg config.LLMConfig) (*AgentProvider, error) {
 	return &AgentProvider{
 		command: command,
 		model:   cfg.Model,
+		env:     env,
 	}, nil
 }
 
@@ -48,6 +76,9 @@ func (p *AgentProvider) ReviewAll(fileDiffs []diff.FileDiff, symbols []config.In
 	}
 
 	cmd := exec.Command(p.command, args...)
+	if len(p.env) > 0 {
+		cmd.Env = append(os.Environ(), p.env...)
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {

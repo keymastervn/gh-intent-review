@@ -22,9 +22,11 @@ type Config struct {
 
 // LLMConfig configures the AI agent used for review.
 type LLMConfig struct {
-	Provider     string `yaml:"provider"`                // only "agent" is supported
+	Provider     string `yaml:"provider"`                // "agent" (default) or "custom"
 	Model        string `yaml:"model,omitempty"`         // passed to the agent via --model
 	AgentCommand string `yaml:"agent_command,omitempty"` // CLI binary to invoke (default: "claude")
+	BaseURL      string `yaml:"base_url,omitempty"`      // custom: ANTHROPIC_BASE_URL (e.g. https://openrouter.ai/api)
+	APIKey       string `yaml:"api_key,omitempty"`       // custom: ANTHROPIC_AUTH_TOKEN
 }
 
 // ReviewConfig controls the review process.
